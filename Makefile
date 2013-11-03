@@ -4,15 +4,15 @@
 # remove them from the CFLAGS defines.
 #
 
-AS86	=as -0 -a
-CC86	=cc -0
-LD86	=ld -0
+AS86	=as86 -0 
+CC86	=cc86 -0
+LD86	=ld86 -0
 
-AS	=gas
-LD	=gld
-LDFLAGS	=-s -x -M
+AS	=as
+LD	=ld
+LDFLAGS	=-s -x -M -Ttext 0 -e startup_32
 CC	=gcc
-CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer -fcombine-regs
+CFLAGS	=-Wall -O -fstrength-reduce -fomit-frame-pointer -fno-stack-protector 
 CPP	=gcc -E -nostdinc -Iinclude
 
 ARCHIVES=kernel/kernel.o mm/mm.o fs/fs.o
@@ -22,7 +22,7 @@ LIBS	=lib/lib.a
 	$(CC) $(CFLAGS) \
 	-nostdinc -Iinclude -S -o $*.s $<
 .s.o:
-	$(AS) -c -o $*.o $<
+	$(AS) -o $*.o $<
 .c.o:
 	$(CC) $(CFLAGS) \
 	-nostdinc -Iinclude -c -o $*.o $<
@@ -30,13 +30,14 @@ LIBS	=lib/lib.a
 all:	Image
 
 Image: boot/boot tools/system tools/build
-	tools/build boot/boot tools/system > Image
-	sync
+       objcopy -O binary -R .note -R .comment tools/system tools/system.bin
+       tools/build boot/boot tools/system.bin > Image
+#      sync
 
 tools/build: tools/build.c
 	$(CC) $(CFLAGS) \
 	-o tools/build tools/build.c
-	chmem +65000 tools/build
+#	chmem +65000 tools/build
 
 boot/head.o: boot/head.s
 
@@ -60,8 +61,8 @@ lib/lib.a:
 	(cd lib; make)
 
 boot/boot:	boot/boot.s tools/system
-	(echo -n "SYSSIZE = (";ls -l tools/system | grep system \
-		| cut -c25-31 | tr '\012' ' '; echo "+ 15 ) / 16") > tmp.s
+	(echo -n "SYSSIZE = (";stat -c%s tools/system \
+		| tr '\012' ' '; echo "+ 15 ) / 16") > tmp.s
 	cat boot/boot.s >> tmp.s
 	$(AS86) -o boot/boot.o tmp.s
 	rm -f tmp.s
@@ -69,7 +70,7 @@ boot/boot:	boot/boot.s tools/system
 
 clean:
 	rm -f Image System.map tmp_make boot/boot core
-	rm -f init/*.o boot/*.o tools/system tools/build
+	rm -f init/*.o boot/*.o tools/system tools/build tools/system.bin
 	(cd mm;make clean)
 	(cd fs;make clean)
 	(cd kernel;make clean)
@@ -77,7 +78,7 @@ clean:
 
 backup: clean
 	(cd .. ; tar cf - linux | compress16 - > backup.Z)
-	sync
+#	sync
 
 dep:
 	sed '/\#\#\# Dependencies/q' < Makefile > tmp_make
